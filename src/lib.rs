@@ -63,7 +63,7 @@ impl Into<i8> for Trit {
     }
 }
 
-pub trait RawTritSlice {
+pub trait RawEncoding {
     /// Get the number of trits in this buffer
     fn len(&self) -> usize;
 
@@ -80,8 +80,8 @@ pub trait RawTritSlice {
     unsafe fn slice_unchecked_mut(&mut self, range: Range<usize>) -> &mut Self;
 }
 
-pub trait RawTritBuf {
-    type Slice: RawTritSlice + ?Sized;
+pub trait RawEncodingBuf {
+    type Slice: RawEncoding + ?Sized;
 
     /// Create a new empty buffer
     fn new() -> Self where Self: Sized;
@@ -105,7 +105,7 @@ pub trait RawTritBuf {
     fn as_slice_mut(&mut self) -> &mut Self::Slice;
 
     /// Convert this encoding into another encoding
-    fn into_encoding<T: RawTritBuf>(this: TritBuf<Self>) -> TritBuf<T> where Self: Sized {
+    fn into_encoding<T: RawEncodingBuf>(this: TritBuf<Self>) -> TritBuf<T> where Self: Sized {
         // if TypeId::of::<Self>() == TypeId::of::<T>() {
         //     unsafe { std::mem::transmute(this) }
         // } else {
@@ -116,9 +116,9 @@ pub trait RawTritBuf {
 
 // T1B1
 
-pub struct T1B1Slice([()]);
+pub struct T1B1([()]);
 
-impl T1B1Slice {
+impl T1B1 {
     unsafe fn make(ptr: *const u8, offset: usize, len: usize) -> *const Self {
         std::mem::transmute((ptr.offset(offset as isize), len))
     }
@@ -128,7 +128,7 @@ impl T1B1Slice {
     }
 }
 
-impl RawTritSlice for T1B1Slice {
+impl RawEncoding for T1B1 {
     fn len(&self) -> usize {
         self.0.len()
     }
@@ -152,8 +152,8 @@ impl RawTritSlice for T1B1Slice {
 
 pub struct T1B1Buf(Vec<u8>);
 
-impl RawTritBuf for T1B1Buf {
-    type Slice = T1B1Slice;
+impl RawEncodingBuf for T1B1Buf {
+    type Slice = T1B1;
 
     fn new() -> Self {
         Self(Vec::new())
@@ -174,9 +174,9 @@ impl RawTritBuf for T1B1Buf {
 
 // B1T3
 
-pub struct T4B1Slice([()]);
+pub struct T4B1([()]);
 
-impl T4B1Slice {
+impl T4B1 {
     unsafe fn make(ptr: *const u8, offset: usize, len: usize) -> *const Self {
         let len = (len << 2) | (offset % 4);
         std::mem::transmute((ptr.offset((offset / 4) as isize), len))
@@ -192,7 +192,7 @@ impl T4B1Slice {
     }
 }
 
-impl RawTritSlice for T4B1Slice {
+impl RawEncoding for T4B1 {
     fn len(&self) -> usize {
         self.len_offset().0
     }
@@ -221,8 +221,8 @@ impl RawTritSlice for T4B1Slice {
 
 pub struct T4B1Buf(Vec<u8>, usize);
 
-impl RawTritBuf for T4B1Buf {
-    type Slice = T4B1Slice;
+impl RawEncodingBuf for T4B1Buf {
+    type Slice = T4B1;
 
     fn new() -> Self {
         Self(Vec::new(), 0)
@@ -250,9 +250,9 @@ impl RawTritBuf for T4B1Buf {
 
 // API
 
-pub struct TritSlice<T: RawTritSlice + ?Sized = T1B1Slice>(T);
+pub struct TritSlice<T: RawEncoding + ?Sized = T1B1>(T);
 
-impl<T: RawTritSlice + ?Sized> TritSlice<T> {
+impl<T: RawEncoding + ?Sized> TritSlice<T> {
     pub fn len(&self) -> usize {
         self.0.len()
     }
@@ -286,7 +286,7 @@ impl<T: RawTritSlice + ?Sized> TritSlice<T> {
     }
 }
 
-impl<'a, T: RawTritSlice> fmt::Debug for &'a TritSlice<T> {
+impl<'a, T: RawEncoding> fmt::Debug for &'a TritSlice<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "TritSlice<{}> [", any::type_name::<T>())?;
         for (i, trit) in self.iter().enumerate() {
@@ -300,7 +300,7 @@ impl<'a, T: RawTritSlice> fmt::Debug for &'a TritSlice<T> {
 }
 
 /*
-impl<T: RawTritSlice, U: Deref<Target=TritSlice<T>>> Index<Range<usize>> for U {
+impl<T: RawEncoding, U: Deref<Target=TritSlice<T>>> Index<Range<usize>> for U {
     type Output = TritSlice<T>;
 
     fn index(&self, range: Range<usize>) -> &Self::Output {
@@ -309,7 +309,7 @@ impl<T: RawTritSlice, U: Deref<Target=TritSlice<T>>> Index<Range<usize>> for U {
 }
 */
 
-impl<T: RawTritSlice> Index<Range<usize>> for TritSlice<T> {
+impl<T: RawEncoding> Index<Range<usize>> for TritSlice<T> {
     type Output = Self;
 
     fn index(&self, range: Range<usize>) -> &Self::Output {
@@ -317,15 +317,15 @@ impl<T: RawTritSlice> Index<Range<usize>> for TritSlice<T> {
     }
 }
 
-impl<T: RawTritSlice> IndexMut<Range<usize>> for TritSlice<T> {
+impl<T: RawEncoding> IndexMut<Range<usize>> for TritSlice<T> {
     fn index_mut(&mut self, range: Range<usize>) -> &mut Self::Output {
         self.slice_mut(range)
     }
 }
 
-pub struct TritBuf<T: RawTritBuf = T1B1Buf>(T);
+pub struct TritBuf<T: RawEncodingBuf = T1B1Buf>(T);
 
-impl<T: RawTritBuf> TritBuf<T> {
+impl<T: RawEncodingBuf> TritBuf<T> {
     pub fn new() -> Self {
         Self(T::new())
     }
@@ -346,12 +346,12 @@ impl<T: RawTritBuf> TritBuf<T> {
         unsafe { &mut *(self.0.as_slice_mut() as *mut T::Slice as *mut TritSlice<T::Slice>) }
     }
 
-    pub fn into_encoding<U: RawTritBuf>(self) -> TritBuf<U> {
+    pub fn into_encoding<U: RawEncodingBuf>(self) -> TritBuf<U> {
         T::into_encoding(self)
     }
 }
 
-impl<T: RawTritBuf> Deref for TritBuf<T> {
+impl<T: RawEncodingBuf> Deref for TritBuf<T> {
     type Target = TritSlice<T::Slice>;
 
     fn deref(&self) -> &Self::Target {
@@ -359,13 +359,13 @@ impl<T: RawTritBuf> Deref for TritBuf<T> {
     }
 }
 
-impl<T: RawTritBuf> DerefMut for TritBuf<T> {
+impl<T: RawEncodingBuf> DerefMut for TritBuf<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_slice_mut()
     }
 }
 
-impl<T: RawTritBuf> FromIterator<Trit> for TritBuf<T> {
+impl<T: RawEncodingBuf> FromIterator<Trit> for TritBuf<T> {
     fn from_iter<I: IntoIterator<Item=Trit>>(iter: I) -> Self {
         let mut this = Self::new();
 
@@ -377,7 +377,7 @@ impl<T: RawTritBuf> FromIterator<Trit> for TritBuf<T> {
     }
 }
 
-impl<T: RawTritBuf> Index<Range<usize>> for TritBuf<T> {
+impl<T: RawEncodingBuf> Index<Range<usize>> for TritBuf<T> {
     type Output = TritSlice<T::Slice>;
 
     fn index(&self, range: Range<usize>) -> &Self::Output {
@@ -385,13 +385,13 @@ impl<T: RawTritBuf> Index<Range<usize>> for TritBuf<T> {
     }
 }
 
-impl<T: RawTritBuf> IndexMut<Range<usize>> for TritBuf<T> {
+impl<T: RawEncodingBuf> IndexMut<Range<usize>> for TritBuf<T> {
     fn index_mut(&mut self, range: Range<usize>) -> &mut Self::Output {
         self.slice_mut(range)
     }
 }
 
-impl<T: RawTritBuf> fmt::Debug for TritBuf<T> {
+impl<T: RawEncodingBuf> fmt::Debug for TritBuf<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "TritBuf<{}> [", any::type_name::<T>())?;
         for (i, trit) in self.iter().enumerate() {
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn compare() {
-        fn slices_eq(a: &TritSlice<T4B1Slice>, b: &TritSlice<T4B1Slice>) -> bool {
+        fn slices_eq(a: &TritSlice<T4B1>, b: &TritSlice<T4B1>) -> bool {
             a
                 .iter()
                 .zip(b.iter())
